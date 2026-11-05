@@ -1,0 +1,33 @@
+WILD ISLAND: SURVIVAL — ANDROID APK REHBERİ
+
+Gereksinimler:
+- Node.js 18+
+- npm
+- Android Studio
+- Android SDK
+- JDK 17
+
+Komutlar:
+1. npm install
+2. İlk kez Android projesi oluşturulacaksa: npm run android:init
+   (build + "npx cap add android" + yatay kilit/tam ekran yapılandırması)
+3. Sonraki her değişiklikte: npm run android:sync
+   (build + "npx cap sync android" + scripts/android-config.js)
+4. npx cap open android
+
+YATAY EKRAN: scripts/android-config.js, AndroidManifest.xml içindeki MainActivity'ye
+android:screenOrientation="sensorLandscape" ekler; APK doğrudan yatay açılır, dikey kullanılamaz.
+Ayrıca MainActivity.java tam ekran (sistem çubukları gizli) ve çentik uyumlu hale getirilir.
+Betik tekrar çalıştırılabilir; android/ klasörü silinip yeniden oluşturulursa "npm run android:config" yeterlidir.
+
+Android Studio içinden:
+Build > Build Bundle(s) / APK(s) > Build APK(s)
+
+Komut satırı:
+Windows: cd android && gradlew.bat assembleDebug
+macOS/Linux: cd android && ./gradlew assembleDebug
+
+APK yolu:
+android/app/build/outputs/apk/debug/app-debug.apk
+
+Not: Bu kaynak ZIP'i tek başına hazır APK içermez. Android projesi Capacitor ile oluşturulmalı ve build edilmelidir.
