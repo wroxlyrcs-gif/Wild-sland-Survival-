@@ -1053,4 +1053,697 @@ function movePlayer(dt) {
     state.energy =
       Math.max(0,state.energy-12*dt);
   } else {
-    stat
+    
+    state.energy = Math.min(100, state.energy + 7 * dt);
+  }
+
+  if (human && typeof human.update === "function") {
+    human.update(dt, {
+      speed: speedNow,
+      grounded: pl.grounded,
+      vy: pl.vy,
+      yawRate: 0
+    });
+  }
+}
+
+/* ============================================================
+   CAMERA
+   ============================================================ */
+
+function updateCamera(dt) {
+  if (!camera || !player) return;
+
+  const target = new THREE.Vector3(
+    player.position.x,
+    player.position.y + (cameraMode === 0 ? 2.2 : 1.65),
+    player.position.z
+  );
+
+  const yaw = state.camera.yaw;
+  const pitch = clamp(state.camera.pitch, -0.5, 1.15);
+
+  const distance = cameraMode === 0 ? 5.5 : 0.15;
+
+  const horizontal = Math.cos(pitch) * distance;
+
+  const offset = new THREE.Vector3(
+    Math.sin(yaw) * horizontal,
+    Math.sin(pitch) * distance,
+    Math.cos(yaw) * horizontal
+  );
+
+  const desired = target.clone().add(offset);
+
+  const factor = smooth(9, dt);
+
+  camera.position.lerp(desired, factor);
+  camera.lookAt(target);
+}
+
+function changeCamera() {
+  cameraMode = cameraMode === 0 ? 1 : 0;
+  toast(cameraMode === 0 ? "Üçüncü şəxs" : "Birinci şəxs");
+}
+
+/* ============================================================
+   TOUCH CONTROLS
+   ============================================================ */
+
+function setupTouchControls() {
+  const joystick = $("wi-joystick");
+  const stick = $("wi-stick");
+  const look = $("wi-look");
+
+  if (joystick && stick) {
+    joystick.addEventListener("pointerdown", e => {
+      if (state.mode !== "game" || state.paused) return;
+
+      joystickPointer = e.pointerId;
+      joystick.setPointerCapture(e.pointerId);
+      updateJoystick(e);
+    });
+
+    joystick.addEventListener("pointermove", e => {
+      if (e.pointerId !== joystickPointer) return;
+      updateJoystick(e);
+    });
+
+    const releaseJoystick = e => {
+      if (e.pointerId !== joystickPointer) return;
+
+      joystickPointer = null;
+      state.movement.x = 0;
+      state.movement.y = 0;
+
+      stick.style.transform = "translate(0px,0px)";
+    };
+
+    joystick.addEventListener("pointerup", releaseJoystick);
+    joystick.addEventListener("pointercancel", releaseJoystick);
+  }
+
+  function updateJoystick(e) {
+    const rect = joystick.getBoundingClientRect();
+
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+
+    let dx = e.clientX - cx;
+    let dy = e.clientY - cy;
+
+    const max = 38;
+    const length = Math.hypot(dx, dy);
+
+    if (length > max) {
+      dx = dx / length * max;
+      dy = dy / length * max;
+    }
+
+    state.movement.x = dx / max;
+    state.movement.y = dy / max;
+
+    stick.style.transform =
+      `translate(${dx}px,${dy}px)`;
+  }
+
+  if (look) {
+    look.addEventListener("pointerdown", e => {
+      if (state.mode !== "game" || state.paused) return;
+
+      lookPointer = e.pointerId;
+      lookLastX = e.clientX;
+      lookLastY = e.clientY;
+
+      try {
+        look.setPointerCapture(e.pointerId);
+      } catch(err) {}
+    });
+
+    look.addEventListener("pointermove", e => {
+      if (e.pointerId !== lookPointer) return;
+
+      const dx = e.clientX - lookLastX;
+      const dy = e.clientY - lookLastY;
+
+      lookLastX = e.clientX;
+      lookLastY = e.clientY;
+
+      state.camera.yaw -=
+        dx * 0.004 * state.camera.sensitivity;
+
+      state.camera.pitch = clamp(
+        state.camera.pitch +
+        dy * 0.003 * state.camera.sensitivity,
+        -0.5,
+        1.15
+      );
+    });
+
+    const releaseLook = e => {
+      if (e.pointerId === lookPointer) {
+        lookPointer = null;
+      }
+    };
+
+    look.addEventListener("pointerup", releaseLook);
+    look.addEventListener("pointercancel", releaseLook);
+  }
+}
+
+function jump() {
+  if (
+    state.mode !== "game" ||
+    state.paused ||
+    state.dead ||
+    !state.player.grounded
+  ) return;
+
+  state.player.vy = CONFIG.JUMP_POWER;
+  state.player.grounded = false;
+}
+
+/* ============================================================
+   RESOURCE SYSTEM
+   ============================================================ */
+
+function getNearbyResource() {
+  if (!world || !player || !Array.isArray(world.resources)) {
+    return null;
+  }
+
+  let nearest = null;
+  let nearestDistance = CONFIG.RESOURCE_DISTANCE;
+
+  for (const resource of world.resources) {
+    if (!resource || resource.collected) continue;
+
+    const object = resource.object || resource.mesh;
+    if (!object || !object.position) continue;
+
+    const distance = player.position.distanceTo(object.position);
+
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = resource;
+    }
+  }
+
+  return nearest;
+}
+
+function collectNearby() {
+  if (state.mode !== "game" || state.paused || state.dead) return;
+
+  const resource = getNearbyResource();
+
+  if (!resource) {
+    toast("Yaxınlıqda resurs yoxdur.");
+    return;
+  }
+
+  const type = resource.type;
+
+  if (!Object.prototype.hasOwnProperty.call(state.inventory, type)) {
+    toast("Bu resurs tanınmadı.");
+    return;
+  }
+
+  const amount = Math.max(1, Number(resource.amount) || 1);
+
+  state.inventory[type] += amount;
+
+  if (world && typeof world.collectResource === "function") {
+    world.collectResource(resource);
+  } else {
+    resource.collected = true;
+
+    const object = resource.object || resource.mesh;
+    if (object) object.visible = false;
+  }
+
+  updateHUD();
+  toast(`${inventoryIcons[type] || "📦"} ${type} +${amount}`);
+}
+
+/* ============================================================
+   SURVIVAL
+   ============================================================ */
+
+function updateSurvival(dt) {
+  if (
+    state.mode !== "game" ||
+    state.paused ||
+    state.dead
+  ) return;
+
+  state.elapsed += dt;
+
+  state.day += dt / CONFIG.DAY_LENGTH;
+
+  if (state.day >= 1) {
+    state.day -= 1;
+    state.dayCount++;
+    toast(`Gün ${state.dayCount} başladı!`);
+  }
+
+  state.food = Math.max(0, state.food - 0.18 * dt);
+  state.water = Math.max(0, state.water - 0.28 * dt);
+
+  if (state.food <= 0) {
+    state.health = Math.max(0, state.health - 1.1 * dt);
+  }
+
+  if (state.water <= 0) {
+    state.health = Math.max(0, state.health - 1.8 * dt);
+  }
+
+  if (state.health <= 0) {
+    state.health = 0;
+    endGame();
+  }
+}
+
+function endGame() {
+  if (state.dead) return;
+
+  state.dead = true;
+  state.paused = true;
+
+  showScreen("wi-dead");
+
+  const hud = $("wi-hud");
+  if (hud) hud.style.display = "none";
+}
+
+function respawn() {
+  state.health = 100;
+  state.food = 100;
+  state.water = 100;
+  state.energy = 100;
+
+  state.dead = false;
+  state.paused = false;
+
+  resetPlayer();
+
+  state.mode = "game";
+
+  showScreen("wi-menu");
+  const hud = $("wi-hud");
+  if (hud) hud.style.display = "block";
+
+  showScreen("wi-menu");
+  $("wi-dead")?.classList.add("hidden");
+
+  updateHUD();
+}
+
+/* ============================================================
+   HUD
+   ============================================================ */
+
+function updateHUD() {
+  const values = {
+    health: state.health,
+    food: state.food,
+    water: state.water,
+    energy: state.energy
+  };
+
+  for (const key in values) {
+    const value = clamp(values[key], 0, 100);
+    const fill = $(`wi-fill-${key}`);
+    const label = $(`wi-value-${key}`);
+
+    if (fill) {
+      fill.style.width = `${value}%`;
+      fill.classList.toggle("low", value < 25);
+    }
+
+    if (label) {
+      label.textContent = Math.round(value);
+    }
+  }
+
+  const day = $("wi-day");
+  if (day) {
+    const isNight = state.day < 0.22 || state.day > 0.78;
+    day.textContent =
+      `${isNight ? "🌙" : "☀️"} Gün ${state.dayCount}`;
+  }
+
+  const items = $("wi-items");
+
+  if (items) {
+    items.innerHTML = Object.keys(state.inventory)
+      .map(key => `
+        <div class="wi-item">
+          <span>${inventoryIcons[key] || "📦"} ${key}</span>
+          <b>${state.inventory[key]}</b>
+        </div>
+      `)
+      .join("");
+  }
+
+  const prompt = $("wi-prompt");
+  if (prompt) {
+    const resource = getNearbyResource();
+
+    prompt.style.display = resource ? "block" : "none";
+
+    if (resource) {
+      prompt.textContent =
+        `✋ ${resource.type} toplamaq üçün düyməyə bas`;
+    }
+  }
+
+  const fps = $("wi-fps");
+
+  if (fps) {
+    fps.style.display = state.settings.showFPS ? "block" : "none";
+    fps.textContent = `FPS: ${currentFPS}`;
+  }
+}
+
+/* ============================================================
+   SAVE / LOAD
+   ============================================================ */
+
+function saveGame() {
+  const data = {
+    version: 1,
+    elapsed: state.elapsed,
+    day: state.day,
+    dayCount: state.dayCount,
+    health: state.health,
+    food: state.food,
+    water: state.water,
+    energy: state.energy,
+    inventory: state.inventory,
+    player: {
+      x: player ? player.position.x : 0,
+      y: player ? player.position.y : 0,
+      z: player ? player.position.z : 10
+    },
+    camera: state.camera
+  };
+
+  if (!storageSet(CONFIG.SAVE_KEY, JSON.stringify(data))) {
+    toast("Yadda saxlamaq mümkün olmadı.");
+    return;
+  }
+
+  toast("Oyun yadda saxlanıldı!");
+  $("wi-continue").disabled = false;
+}
+
+function loadGame() {
+  const raw = storageGet(CONFIG.SAVE_KEY);
+
+  if (!raw) {
+    toast("Yaddaş faylı tapılmadı.");
+    return;
+  }
+
+  let data;
+
+  try {
+    data = JSON.parse(raw);
+  } catch(e) {
+    toast("Yaddaş faylı zədələnib.");
+    return;
+  }
+
+  try {
+    startGame();
+
+    state.elapsed = Number(data.elapsed) || 0;
+    state.day = Number(data.day) || 0.25;
+    state.dayCount = Number(data.dayCount) || 1;
+
+    state.health = clamp(Number(data.health) || 100, 0, 100);
+    state.food = clamp(Number(data.food) || 100, 0, 100);
+    state.water = clamp(Number(data.water) || 100, 0, 100);
+    state.energy = clamp(Number(data.energy) || 100, 0, 100);
+
+    if (data.inventory) {
+      for (const key of Object.keys(state.inventory)) {
+        state.inventory[key] =
+          Math.max(0, Number(data.inventory[key]) || 0);
+      }
+    }
+
+    if (data.player && player) {
+      player.position.set(
+        Number(data.player.x) || 0,
+        Number(data.player.y) || 0,
+        Number(data.player.z) || 10
+      );
+    }
+
+    if (data.camera) {
+      state.camera.yaw = Number(data.camera.yaw) || 0;
+      state.camera.pitch = Number(data.camera.pitch) || 0.38;
+    }
+
+    updateHUD();
+    toast("Oyun yükləndi!");
+  } catch(e) {
+    console.error("Load error:", e);
+    toast("Oyun yüklənərkən xəta baş verdi.");
+  }
+}
+
+/* ============================================================
+   GAME STATES
+   ============================================================ */
+
+function startGame() {
+  if (!initialized) {
+    initScene();
+  }
+
+  state.mode = "game";
+  state.paused = false;
+  state.dead = false;
+
+  showScreen("wi-menu");
+  $("wi-menu")?.classList.add("hidden");
+  $("wi-settings")?.classList.add("hidden");
+  $("wi-pause-screen")?.classList.add("hidden");
+  $("wi-dead")?.classList.add("hidden");
+
+  const hud = $("wi-hud");
+  if (hud) hud.style.display = "block";
+
+  if (clock) clock.start();
+
+  updateHUD();
+
+  if (!running) {
+    running = true;
+    animate();
+  }
+}
+
+function newGame() {
+  state.elapsed = 0;
+  state.day = 0.25;
+  state.dayCount = 1;
+
+  state.health = 100;
+  state.food = 100;
+  state.water = 100;
+  state.energy = 100;
+
+  for (const key of Object.keys(state.inventory)) {
+    state.inventory[key] = 0;
+  }
+
+  resetPlayer();
+  startGame();
+
+  toast("Yeni macəra başladı!");
+}
+
+function pauseGame() {
+  if (state.mode !== "game" || state.paused) return;
+
+  state.paused = true;
+
+  showScreen("wi-pause-screen");
+}
+
+function resumeGame() {
+  if (state.dead) return;
+
+  state.paused = false;
+  $("wi-pause-screen")?.classList.add("hidden");
+
+  if (clock) clock.getDelta();
+}
+
+function goMenu() {
+  state.mode = "menu";
+  state.paused = false;
+  state.movement.sprint = false;
+
+  showScreen("wi-menu");
+
+  const hud = $("wi-hud");
+  if (hud) hud.style.display = "none";
+
+  if (player) {
+    state.player.x = player.position.x;
+    state.player.y = player.position.y;
+    state.player.z = player.position.z;
+  }
+}
+
+/* ============================================================
+   WORLD UPDATE
+   ============================================================ */
+
+function updateWorld(dt) {
+  if (state.mode !== "game" || state.paused || state.dead) return;
+
+  if (world && typeof world.update === "function") {
+    world.update(dt);
+  }
+
+  if (environment && typeof environment.update === "function") {
+    environment.update(dt, state.day);
+  }
+}
+
+/* ============================================================
+   INPUT
+   ============================================================ */
+
+addEventListener("keydown", e => {
+  keys[e.code] = true;
+
+  if (
+    ["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"]
+      .includes(e.code)
+  ) {
+    e.preventDefault();
+  }
+
+  if (e.code === "Space") jump();
+
+  if (e.code === "KeyE") collectNearby();
+
+  if (e.code === "Escape") {
+    if (state.paused) resumeGame();
+    else pauseGame();
+  }
+
+  if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
+    state.movement.sprint = true;
+  }
+});
+
+addEventListener("keyup", e => {
+  keys[e.code] = false;
+
+  if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
+    state.movement.sprint = false;
+  }
+});
+
+addEventListener("blur", () => {
+  state.movement.sprint = false;
+  for (const key of Object.keys(keys)) keys[key] = false;
+});
+
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+
+function animate() {
+  if (!running) return;
+
+  animationFrame = requestAnimationFrame(animate);
+
+  if (!renderer || !scene || !camera) return;
+
+  let dt = clock ? clock.getDelta() : 0.016;
+  dt = clamp(dt, 0, 0.05);
+
+  fpsFrames++;
+  fpsTime += dt;
+
+  if (fpsTime >= 1) {
+    currentFPS = Math.round(fpsFrames / fpsTime);
+    fpsFrames = 0;
+    fpsTime = 0;
+  }
+
+  if (state.mode === "game" && !state.paused && !state.dead) {
+    movePlayer(dt);
+    updateSurvival(dt);
+    updateWorld(dt);
+    updateHUD();
+  }
+
+  if (state.mode === "game") {
+    updateCamera(dt);
+  }
+
+  renderer.render(scene, camera);
+}
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+
+function boot() {
+  try {
+    loadSettings();
+    createInterface();
+    initScene();
+
+    resetPlayer();
+    updateHUD();
+
+    WI.debug = true;
+
+    if (typeof window.hideLoadingScreen === "function") {
+      window.hideLoadingScreen();
+    }
+
+    const continueButton = $("wi-continue");
+    if (continueButton) {
+      continueButton.disabled = !hasSave();
+    }
+
+    if (!running) {
+      running = true;
+      animate();
+    }
+
+    console.log("WILD ISLAND: SURVIVAL hazırdır.");
+
+  } catch(e) {
+    console.error("WILD ISLAND boot error:", e);
+
+    WI.debug = false;
+
+    if (typeof window.showGameError === "function") {
+      window.showGameError(
+        "Oyun başlatıla bilmədi: " + e.message
+      );
+    }
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot, { once: true });
+} else {
+  boot();
+}
+
+})();
+     
