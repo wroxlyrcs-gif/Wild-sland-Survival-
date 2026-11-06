@@ -1,7 +1,7 @@
 /* ============================================================
    WILD ISLAND: SURVIVAL — GAME.JS
-   Complete gameplay controller
-   Three.js | Android | Mobile + Desktop
+   Complete Gameplay Controller
+   Three.js | Android | Desktop
    ============================================================ */
 
 (() => {
@@ -10,14 +10,17 @@
 const WI = window.WI = window.WI || {};
 const $ = id => document.getElementById(id);
 const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
-const smooth = (r,dt) => 1 - Math.exp(-r*dt);
+const smooth = (r,dt) => 1-Math.exp(-r*dt);
 
-if (!window.THREE) {
+const THREE = window.THREE;
+
+if (!THREE) {
   window.showGameError?.("Three.js yüklənmədi!");
   return;
 }
 
-const THREE = window.THREE;
+if (WI.__gameStarted) return;
+WI.__gameStarted = true;
 
 const CONFIG = {
   WALK_SPEED: 4.2,
@@ -25,7 +28,7 @@ const CONFIG = {
   JUMP_POWER: 6.2,
   GRAVITY: 19,
   WORLD_LIMIT: 97,
-  RESOURCE_DISTANCE: 3.2,
+  RESOURCE_DISTANCE: 3.5,
   DAY_LENGTH: 360,
   SAVE_KEY: "wild_island_save_v1",
   SETTINGS_KEY: "wild_island_settings_v1"
@@ -36,9 +39,9 @@ const state = {
   paused: false,
   dead: false,
 
-  time: 0,
+  elapsed: 0,
   day: 0.25,
-  dayCount: 0,
+  dayCount: 1,
 
   health: 100,
   food: 100,
@@ -59,8 +62,7 @@ const state = {
     y: 0,
     z: 10,
     vy: 0,
-    grounded: true,
-    rotation: 0
+    grounded: true
   },
 
   movement: {
@@ -76,8 +78,7 @@ const state = {
 
   camera: {
     yaw: 0,
-    pitch: 0.48,
-    distance: 8,
+    pitch: 0.38,
     sensitivity: 1
   },
 
@@ -85,35 +86,32 @@ const state = {
     quality: "medium",
     sensitivity: 1,
     showFPS: false
-  },
-
-  resources: [],
-  toastTimer: 0,
-  fps: 0,
-  elapsed: 0
+  }
 };
 
 let scene = null;
 let camera = null;
 let renderer = null;
 let clock = null;
+
 let player = null;
 let human = null;
 let environment = null;
 let world = null;
 
-let animationFrame = 0;
-let lastTime = 0;
 let initialized = false;
-let disposed = false;
+let running = false;
+let animationFrame = 0;
+let cameraMode = 0;
+
+let fpsFrames = 0;
+let fpsTime = 0;
+let currentFPS = 0;
 
 let joystickPointer = null;
 let lookPointer = null;
 let lookLastX = 0;
 let lookLastY = 0;
-
-let fpsFrames = 0;
-let fpsTime = 0;
 
 const keys = Object.create(null);
 
@@ -127,13 +125,34 @@ const inventoryIcons = {
 };
 
 /* ============================================================
-   SETTINGS
+   STORAGE
    ============================================================ */
+
+function storageGet(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch(e) {
+    return null;
+  }
+}
+
+function storageSet(key,value) {
+  try {
+    localStorage.setItem(key,value);
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+function hasSave() {
+  return !!storageGet(CONFIG.SAVE_KEY);
+}
 
 function loadSettings() {
   try {
     const saved = JSON.parse(
-      localStorage.getItem(CONFIG.SETTINGS_KEY) || "null"
+      storageGet(CONFIG.SETTINGS_KEY) || "null"
     );
 
     if (!saved) return;
@@ -143,60 +162,35 @@ function loadSettings() {
     }
 
     if (Number.isFinite(saved.sensitivity)) {
-      state.settings.sensitivity = clamp(saved.sensitivity,0.5,2);
-      state.camera.sensitivity = state.settings.sensitivity;
+      state.settings.sensitivity =
+        clamp(saved.sensitivity,0.5,2);
     }
 
     state.settings.showFPS = !!saved.showFPS;
 
-  } catch (e) {
-    console.warn("Settings could not be loaded:",e);
+    state.camera.sensitivity =
+      state.settings.sensitivity;
+
+  } catch(e) {
+    console.warn("Settings error:",e);
   }
 }
 
 function saveSettings() {
-  try {
-    localStorage.setItem(
-      CONFIG.SETTINGS_KEY,
-      JSON.stringify(state.settings)
-    );
-  } catch (e) {}
-}
-
-function applyQuality() {
-  if (!renderer) return;
-
-  const ratios = {
-    low: 1,
-    medium: 1.35,
-    high: 1.75
-  };
-
-  const ratio = Math.min(
-    window.devicePixelRatio || 1,
-    ratios[state.settings.quality] || 1
+  storageSet(
+    CONFIG.SETTINGS_KEY,
+    JSON.stringify(state.settings)
   );
-
-  renderer.setPixelRatio(ratio);
-  renderer.setSize(innerWidth,innerHeight);
-
-  renderer.shadowMap.enabled =
-    state.settings.quality !== "low";
-
-  if (environment?.setQuality) {
-    environment.setQuality(state.settings.quality);
-  }
 }
 
 /* ============================================================
-   INTERFACE
+   INTERFACE STYLES
    ============================================================ */
 
 function createInterface() {
   if ($("wi-interface")) return;
 
   const style = document.createElement("style");
-
   style.id = "wi-style";
 
   style.textContent = `
@@ -205,8 +199,8 @@ function createInterface() {
     inset:0;
     z-index:20;
     pointer-events:none;
-    font-family:Arial,sans-serif;
     color:white;
+    font-family:Arial,sans-serif;
     user-select:none;
   }
 
@@ -215,11 +209,12 @@ function createInterface() {
   }
 
   .wi-panel {
-    background:rgba(8,15,19,.91);
-    border:1px solid rgba(255,255,255,.13);
-    border-radius:15px;
-    padding:18px;
+    background:rgba(8,15,19,.94);
+    border:1px solid rgba(255,255,255,.14);
+    border-radius:16px;
+    padding:20px;
     backdrop-filter:blur(12px);
+    box-shadow:0 15px 50px rgba(0,0,0,.35);
   }
 
   .wi-screen {
@@ -229,7 +224,7 @@ function createInterface() {
     justify-content:center;
     align-items:center;
     pointer-events:auto;
-    background:rgba(0,0,0,.66);
+    background:rgba(0,0,0,.68);
   }
 
   .wi-screen.hidden {
@@ -239,20 +234,21 @@ function createInterface() {
   .wi-menu {
     width:min(420px,90vw);
     text-align:center;
+    max-height:90vh;
+    overflow-y:auto;
   }
 
   .wi-title {
     font-size:34px;
     font-weight:900;
     letter-spacing:3px;
-    margin-bottom:5px;
   }
 
   .wi-subtitle {
     color:#a8c2bd;
-    font-size:12px;
+    font-size:11px;
     letter-spacing:4px;
-    margin-bottom:28px;
+    margin:8px 0 25px;
   }
 
   .wi-button {
@@ -264,7 +260,7 @@ function createInterface() {
     border-radius:10px;
     padding:14px;
     margin-top:10px;
-    font-size:15px;
+    font-size:14px;
     font-weight:bold;
     cursor:pointer;
   }
@@ -276,6 +272,10 @@ function createInterface() {
 
   .wi-button:active {
     transform:scale(.98);
+  }
+
+  .wi-button:disabled {
+    opacity:.4;
   }
 
   #wi-hud {
@@ -300,8 +300,8 @@ function createInterface() {
   }
 
   .wi-stat-name {
-    width:48px;
-    color:#ddd;
+    width:49px;
+    color:#eee;
   }
 
   .wi-bar {
@@ -329,7 +329,7 @@ function createInterface() {
     right:14px;
     padding:9px 13px;
     border-radius:10px;
-    background:rgba(0,0,0,.55);
+    background:rgba(0,0,0,.6);
     font-size:12px;
   }
 
@@ -339,7 +339,7 @@ function createInterface() {
     left:14px;
     width:180px;
     padding:10px;
-    background:rgba(0,0,0,.5);
+    background:rgba(0,0,0,.55);
     border-radius:10px;
     font-size:12px;
   }
@@ -347,7 +347,7 @@ function createInterface() {
   .wi-item {
     display:flex;
     justify-content:space-between;
-    margin:5px 0;
+    margin:6px 0;
   }
 
   #wi-toast {
@@ -356,7 +356,7 @@ function createInterface() {
     left:50%;
     transform:translateX(-50%);
     padding:11px 18px;
-    background:rgba(0,0,0,.8);
+    background:rgba(0,0,0,.85);
     border-radius:10px;
     font-size:13px;
     opacity:0;
@@ -376,16 +376,18 @@ function createInterface() {
     flex-direction:column;
     gap:10px;
     pointer-events:auto;
+    z-index:4;
   }
 
   .wi-action {
-    width:58px;
-    height:58px;
+    width:55px;
+    height:55px;
     border-radius:50%;
     border:1px solid rgba(255,255,255,.3);
     color:white;
-    background:rgba(0,0,0,.55);
-    font-size:22px;
+    background:rgba(0,0,0,.58);
+    font-size:21px;
+    touch-action:none;
   }
 
   #wi-joystick {
@@ -399,6 +401,7 @@ function createInterface() {
     border:2px solid rgba(255,255,255,.2);
     pointer-events:auto;
     touch-action:none;
+    z-index:4;
   }
 
   #wi-stick {
@@ -420,10 +423,11 @@ function createInterface() {
     width:42px;
     height:42px;
     border-radius:10px;
-    background:rgba(0,0,0,.55);
+    background:rgba(0,0,0,.65);
     color:white;
     border:1px solid #777;
     font-size:18px;
+    z-index:5;
   }
 
   #wi-fps {
@@ -439,7 +443,7 @@ function createInterface() {
     left:50%;
     bottom:190px;
     transform:translateX(-50%);
-    background:rgba(0,0,0,.7);
+    background:rgba(0,0,0,.75);
     border-radius:9px;
     padding:10px 15px;
     font-size:13px;
@@ -455,26 +459,25 @@ function createInterface() {
     height:100%;
     pointer-events:auto;
     touch-action:none;
+    z-index:2;
   }
 
-  @media (pointer:fine) {
+  @media(pointer:fine) {
     #wi-joystick {display:none}
-    #wi-actions {bottom:25px}
   }
 
-  @media (max-width:600px) {
+  @media(max-width:600px) {
     #wi-stats {width:155px}
     #wi-inventory {width:155px;top:145px}
     .wi-title {font-size:27px}
     #wi-actions {right:12px;bottom:25px}
-    .wi-action {width:51px;height:51px}
+    .wi-action {width:50px;height:50px}
   }
   `;
 
   document.head.appendChild(style);
 
   const root = document.createElement("div");
-
   root.id = "wi-interface";
 
   root.innerHTML = `
@@ -495,8 +498,8 @@ function createInterface() {
           AYARLAR
         </button>
 
-        <div style="margin-top:20px;color:#8ca49c;font-size:11px">
-          Explore • Collect • Survive
+        <div style="margin-top:20px;color:#91aaa0;font-size:11px">
+          EXPLORE • COLLECT • SURVIVE
         </div>
       </div>
     </div>
@@ -506,6 +509,7 @@ function createInterface() {
         <h2>AYARLAR</h2>
 
         <p>Qrafika keyfiyyəti</p>
+
         <select id="wi-quality" class="wi-button">
           <option value="low">Aşağı</option>
           <option value="medium">Orta</option>
@@ -513,8 +517,10 @@ function createInterface() {
         </select>
 
         <p>Həssaslıq</p>
+
         <input id="wi-sensitivity" type="range"
-          min=".5" max="2" step=".1" style="width:100%">
+          min=".5" max="2" step=".1"
+          style="width:100%">
 
         <button class="wi-button" id="wi-fps-toggle">
           FPS: OFF
@@ -584,9 +590,11 @@ function createInterface() {
       <div class="wi-panel wi-menu">
         <h2>OYUN BİTDİ</h2>
         <p>Macəran burada dayandı.</p>
+
         <button class="wi-button primary" id="wi-respawn">
           YENİDƏN BAŞLA
         </button>
+
         <button class="wi-button" id="wi-dead-menu">
           ƏSAS MENYU
         </button>
@@ -596,46 +604,7 @@ function createInterface() {
 
   document.body.appendChild(root);
 
-  $("wi-new").onclick = newGame;
-  $("wi-continue").onclick = loadGame;
-  $("wi-settings-open").onclick = () => showScreen("wi-settings");
-  $("wi-settings-back").onclick = () => showScreen("wi-menu");
-  $("wi-resume").onclick = resumeGame;
-  $("wi-save").onclick = saveGame;
-  $("wi-main-menu").onclick = goMenu;
-  $("wi-pause").onclick = pauseGame;
-  $("wi-collect").onclick = collectNearby;
-  $("wi-jump").onclick = jump;
-  $("wi-run").onpointerdown = () => state.movement.sprint = true;
-  $("wi-run").onpointerup = () => state.movement.sprint = false;
-  $("wi-run").onpointerleave = () => state.movement.sprint = false;
-  $("wi-camera").onclick = changeCamera;
-  $("wi-respawn").onclick = respawn;
-  $("wi-dead-menu").onclick = goMenu;
-
-  $("wi-quality").value = state.settings.quality;
-  $("wi-sensitivity").value = state.settings.sensitivity;
-
-  $("wi-quality").onchange = e => {
-    state.settings.quality = e.target.value;
-    applyQuality();
-    saveSettings();
-  };
-
-  $("wi-sensitivity").oninput = e => {
-    state.settings.sensitivity = Number(e.target.value);
-    state.camera.sensitivity = state.settings.sensitivity;
-    saveSettings();
-  };
-
-  $("wi-fps-toggle").onclick = () => {
-    state.settings.showFPS = !state.settings.showFPS;
-    $("wi-fps-toggle").textContent =
-      "FPS: " + (state.settings.showFPS ? "ON" : "OFF");
-    saveSettings();
-  };
-
-  $("wi-continue").disabled = !hasSave();
+  bindInterface();
   setupTouchControls();
 }
 
@@ -651,12 +620,93 @@ function makeStat(id,label) {
   `;
 }
 
+function bindInterface() {
+
+  $("wi-new").onclick = newGame;
+  $("wi-continue").onclick = loadGame;
+
+  $("wi-settings-open").onclick =
+    () => showScreen("wi-settings");
+
+  $("wi-settings-back").onclick =
+    () => showScreen("wi-menu");
+
+  $("wi-resume").onclick = resumeGame;
+  $("wi-save").onclick = saveGame;
+  $("wi-main-menu").onclick = goMenu;
+  $("wi-pause").onclick = pauseGame;
+
+  $("wi-collect").onclick = collectNearby;
+  $("wi-jump").onclick = jump;
+
+  $("wi-run").onpointerdown = e => {
+    e.preventDefault();
+    state.movement.sprint = true;
+  };
+
+  $("wi-run").onpointerup = () => {
+    state.movement.sprint = false;
+  };
+
+  $("wi-run").onpointercancel = () => {
+    state.movement.sprint = false;
+  };
+
+  $("wi-run").onpointerleave = () => {
+    state.movement.sprint = false;
+  };
+
+  $("wi-camera").onclick = changeCamera;
+  $("wi-respawn").onclick = respawn;
+  $("wi-dead-menu").onclick = goMenu;
+
+  $("wi-quality").value = state.settings.quality;
+  $("wi-sensitivity").value = state.settings.sensitivity;
+
+  $("wi-quality").onchange = e => {
+    state.settings.quality = e.target.value;
+    applyQuality();
+    saveSettings();
+  };
+
+  $("wi-sensitivity").oninput = e => {
+    state.settings.sensitivity =
+      Number(e.target.value);
+
+    state.camera.sensitivity =
+      state.settings.sensitivity;
+
+    saveSettings();
+  };
+
+  $("wi-fps-toggle").onclick = () => {
+    state.settings.showFPS =
+      !state.settings.showFPS;
+
+    $("wi-fps-toggle").textContent =
+      "FPS: " +
+      (state.settings.showFPS ? "ON" : "OFF");
+
+    saveSettings();
+  };
+
+  $("wi-continue").disabled = !hasSave();
+}
+
 function showScreen(id) {
-  ["wi-menu","wi-settings","wi-pause-screen","wi-dead"]
-    .forEach(k => $(k)?.classList.add("hidden"));
+  [
+    "wi-menu",
+    "wi-settings",
+    "wi-pause-screen",
+    "wi-dead"
+  ].forEach(k => {
+    $(k)?.classList.add("hidden");
+  });
 
   $(id)?.classList.remove("hidden");
 }
+
+let toastTimeout = null;
 
 function toast(message) {
   const el = $("wi-toast");
@@ -665,9 +715,11 @@ function toast(message) {
   el.textContent = message;
   el.classList.add("show");
 
-  clearTimeout(toast.timer);
+  if (toastTimeout) {
+    clearTimeout(toastTimeout);
+  }
 
-  toast.timer = setTimeout(() => {
+  toastTimeout = setTimeout(() => {
     el.classList.remove("show");
   },1800);
 }
@@ -679,11 +731,29 @@ function toast(message) {
 function initScene() {
   if (initialized) return;
 
+  const container = $("game-container");
+
+  if (!container) {
+    throw new Error("game-container tapılmadı.");
+  }
+
+  if (!WI.createEnvironment) {
+    throw new Error("environment.js sistemi tapılmadı.");
+  }
+
+  if (!WI.createWorld) {
+    throw new Error("world.js sistemi tapılmadı.");
+  }
+
+  if (!WI.createHuman) {
+    throw new Error("character.js sistemi tapılmadı.");
+  }
+
   scene = new THREE.Scene();
 
   camera = new THREE.PerspectiveCamera(
-    55,
-    innerWidth / innerHeight,
+    60,
+    Math.max(1,innerWidth)/Math.max(1,innerHeight),
     0.1,
     1500
   );
@@ -693,9 +763,21 @@ function initScene() {
     powerPreference: "high-performance"
   });
 
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.setPixelRatio(
+    Math.min(devicePixelRatio || 1,1.5)
+  );
+
+  renderer.setSize(innerWidth,innerHeight);
+
+  renderer.shadowMap.enabled =
+    state.settings.quality !== "low";
+
+  renderer.shadowMap.type =
+    THREE.PCFSoftShadowMap;
+
+  renderer.toneMapping =
+    THREE.ACESFilmicToneMapping;
+
   renderer.toneMappingExposure = 1.1;
 
   renderer.domElement.style.position = "absolute";
@@ -704,7 +786,7 @@ function initScene() {
   renderer.domElement.style.height = "100%";
   renderer.domElement.style.zIndex = "0";
 
-  $("game-container").appendChild(renderer.domElement);
+  container.appendChild(renderer.domElement);
 
   environment = WI.createEnvironment({
     scene,
@@ -716,12 +798,10 @@ function initScene() {
   world = WI.createWorld({
     scene,
     camera,
-    renderer
+    renderer,
+    getPlayerPosition: () =>
+      player ? player.position : null
   });
-
-  if (world.addStatics && environment?.obstacles) {
-    world.addStatics(environment.obstacles);
-  }
 
   human = WI.createHuman({
     quality: state.settings.quality
@@ -729,20 +809,24 @@ function initScene() {
 
   player = human.root;
 
-  scene.add(player);
+  if (!player) {
+    throw new Error("Character root yaradılmadı.");
+  }
 
-  applyQuality();
+  scene.add(player);
 
   clock = new THREE.Clock();
 
-  addEventListener("resize", resize);
+  applyQuality();
+
+  addEventListener("resize",resize);
 
   renderer.domElement.addEventListener(
     "webglcontextlost",
     e => {
       e.preventDefault();
       pauseGame();
-      toast("Qrafika bağlantısı itirildi. Səhifəni yenilə.");
+      toast("Qrafika bağlantısı itirildi.");
     }
   );
 
@@ -752,10 +836,39 @@ function initScene() {
 function resize() {
   if (!camera || !renderer) return;
 
-  camera.aspect = innerWidth / innerHeight;
+  camera.aspect =
+    Math.max(1,innerWidth)/
+    Math.max(1,innerHeight);
+
   camera.updateProjectionMatrix();
 
   renderer.setSize(innerWidth,innerHeight);
+}
+
+function applyQuality() {
+  if (!renderer) return;
+
+  const ratios = {
+    low: 1,
+    medium: 1.35,
+    high: 1.65
+  };
+
+  renderer.setPixelRatio(
+    Math.min(
+      devicePixelRatio || 1,
+      ratios[state.settings.quality] || 1
+    )
+  );
+
+  renderer.shadowMap.enabled =
+    state.settings.quality !== "low";
+
+  renderer.setSize(innerWidth,innerHeight);
+
+  environment?.setQuality?.(
+    state.settings.quality
+  );
 }
 
 /* ============================================================
@@ -763,6 +876,7 @@ function resize() {
    ============================================================ */
 
 function resetPlayer() {
+
   state.player.x = 0;
   state.player.y = 0;
   state.player.z = 10;
@@ -772,28 +886,42 @@ function resetPlayer() {
   state.velocity.x = 0;
   state.velocity.z = 0;
 
-  player.position.set(0,0,10);
-  player.rotation.set(0,0,0);
+  state.movement.x = 0;
+  state.movement.y = 0;
+  state.movement.sprint = false;
 
-  player.visible = true;
+  state.camera.yaw = 0;
+  state.camera.pitch = 0.38;
+
+  if (player) {
+    player.position.set(0,0,10);
+    player.rotation.set(0,0,0);
+    player.visible = true;
+  }
 
   human?.reset?.();
 }
 
 function groundHeight(x,z) {
-  try {
-    if (world?.groundHeight) {
-      return world.groundHeight(x,z);
-    }
-  } catch(e) {}
+
+  if (world?.groundHeight) {
+    try {
+      const h = world.groundHeight(x,z);
+      if (Number.isFinite(h)) return h;
+    } catch(e) {}
+  }
 
   return 0;
 }
 
 function movePlayer(dt) {
-  if (!player || state.mode !== "game" || state.paused || state.dead) {
-    return;
-  }
+
+  if (
+    !player ||
+    state.mode !== "game" ||
+    state.paused ||
+    state.dead
+  ) return;
 
   let mx = state.movement.x;
   let my = state.movement.y;
@@ -822,6 +950,7 @@ function movePlayer(dt) {
   let targetZ = 0;
 
   if (length > 0.02) {
+
     const yaw = state.camera.yaw;
 
     const fx = -Math.sin(yaw);
@@ -830,22 +959,36 @@ function movePlayer(dt) {
     const rx = Math.cos(yaw);
     const rz = -Math.sin(yaw);
 
-    targetX = (rx * mx + fx * -my) * speed;
-    targetZ = (rz * mx + fz * -my) * speed;
+    targetX =
+      (rx*mx+fx*-my)*speed;
+
+    targetZ =
+      (rz*mx+fz*-my)*speed;
   }
 
-  const k = smooth(length > 0.02 ? 13 : 18,dt);
+  const k = smooth(
+    length > 0.02 ? 13 : 18,
+    dt
+  );
 
-  state.velocity.x += (targetX-state.velocity.x)*k;
-  state.velocity.z += (targetZ-state.velocity.z)*k;
+  state.velocity.x +=
+    (targetX-state.velocity.x)*k;
+
+  state.velocity.z +=
+    (targetZ-state.velocity.z)*k;
 
   const velocity = state.velocity;
 
-  const speedNow = Math.hypot(velocity.x,velocity.z);
+  const speedNow =
+    Math.hypot(velocity.x,velocity.z);
 
   if (speedNow > 0.01) {
-    let nx = player.position.x + velocity.x*dt;
-    let nz = player.position.z + velocity.z*dt;
+
+    let nx =
+      player.position.x+velocity.x*dt;
+
+    let nz =
+      player.position.z+velocity.z*dt;
 
     const distance = Math.hypot(nx,nz);
 
@@ -854,20 +997,11 @@ function movePlayer(dt) {
       nz *= CONFIG.WORLD_LIMIT/distance;
     }
 
-    if (world?.pushOut) {
-      try {
-        const result = world.pushOut(nx,nz,0.38);
-        if (result) {
-          nx = result.x;
-          nz = result.z;
-        }
-      } catch(e) {}
-    }
-
     player.position.x = nx;
     player.position.z = nz;
 
-    const targetRotation = Math.atan2(velocity.x,velocity.z);
+    const targetRotation =
+      Math.atan2(velocity.x,velocity.z);
 
     let difference =
       targetRotation-player.rotation.y;
@@ -884,7 +1018,9 @@ function movePlayer(dt) {
   const pl = state.player;
 
   if (!pl.grounded) {
+
     pl.vy -= CONFIG.GRAVITY*dt;
+
     player.position.y += pl.vy*dt;
 
     const ground = groundHeight(
@@ -897,7 +1033,9 @@ function movePlayer(dt) {
       pl.vy = 0;
       pl.grounded = true;
     }
+
   } else {
+
     const ground = groundHeight(
       player.position.x,
       player.position.z
@@ -907,86 +1045,12 @@ function movePlayer(dt) {
       (ground-player.position.y)*Math.min(1,dt*15);
   }
 
+  pl.x = player.position.x;
+  pl.y = player.position.y;
+  pl.z = player.position.z;
+
   if (length > 0.02 && running) {
-    state.energy = Math.max(0,state.energy-12*dt);
+    state.energy =
+      Math.max(0,state.energy-12*dt);
   } else {
-    state.energy = Math.min(100,state.energy+5*dt);
-  }
-
-  if (human?.update) {
-    human.update(dt,{
-      speed:speedNow,
-      grounded:pl.grounded,
-      vy:pl.vy,
-      yawRate:0
-    });
-  }
-}
-
-function jump() {
-  if (
-    state.mode !== "game" ||
-    state.paused ||
-    !state.player.grounded
-  ) return;
-
-  state.player.vy = CONFIG.JUMP_POWER;
-  state.player.grounded = false;
-}
-
-/* ============================================================
-   CAMERA
-   ============================================================ */
-
-let cameraMode = 0;
-
-function changeCamera() {
-  cameraMode = (cameraMode+1)%3;
-
-  const names = [
-    "Üçüncü şəxs",
-    "Yaxın kamera",
-    "Birinci şəxs"
-  ];
-
-  toast("Kamera: "+names[cameraMode]);
-}
-
-function updateCamera(dt) {
-  if (!camera || !player) return;
-
-  const p = player.position;
-  const yaw = state.camera.yaw;
-  const pitch = state.camera.pitch;
-
-  if (cameraMode === 2) {
-    player.visible = false;
-
-    const fx = -Math.sin(yaw);
-    const fz = -Math.cos(yaw);
-
-    camera.position.set(
-      p.x+fx*0.2,
-      p.y+1.6,
-      p.z+fz*0.2
-    );
-
-    camera.lookAt(
-      p.x+fx*10,
-      p.y+1.5-Math.sin(pitch)*5,
-      p.z+fz*10
-    );
-
-    return;
-  }
-
-  player.visible = true;
-
-  const distance = cameraMode === 1 ? 4.2 : 8;
-
-  const horizontal = Math.cos(pitch)*distance;
-  const height = Math.sin(pitch)*distance;
-
-  const target = new THREE.Vector3(
-    p.x+Math.sin(yaw)*horizontal,
-   
+    stat
