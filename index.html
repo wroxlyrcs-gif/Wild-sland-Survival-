@@ -9,134 +9,368 @@
   <meta name="mobile-web-app-capable" content="yes">
   <title>WILD ISLAND: SURVIVAL</title>
   <link rel="stylesheet" href="css/style.css">
+
+  <script>
+    window.__boot = { t: Date.now() };
+    window.__errs = [];
+
+    window.addEventListener("error", function(e) {
+      window.__errs.push(
+        (e.message || "JavaScript xətası") +
+        " | " + (e.filename || "") +
+        ":" + (e.lineno || "")
+      );
+    });
+
+    window.addEventListener("unhandledrejection", function(e) {
+      window.__errs.push(
+        "Promise xətası: " + String(e.reason)
+      );
+    });
+  </script>
 </head>
+
 <body>
   <div id="game-container"></div>
 
-  <!-- Oyun içi arayüz -->
+  <!-- OYUN HUD -->
   <div id="hud" class="hidden">
     <section class="stats-panel" aria-label="Durum">
-      <div class="stat s-health" data-i18n-title="health"><i class="ico"><svg viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg></i><div class="bar"><i id="health-fill" class="health"></i></div><b id="health-val">100</b></div>
-      <div class="stat s-food" data-i18n-title="food"><i class="ico"><svg viewBox="0 0 24 24"><path d="M7 3v8M4 3v5a3 3 0 0 0 6 0V3M7 11v10M17 21V3c-2.5 1.5-3.5 4-3.5 7v4H17"/></svg></i><div class="bar"><i id="food-fill" class="food"></i></div><b id="food-val">100</b></div>
-      <div class="stat s-water" data-i18n-title="water"><i class="ico"><svg viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg></i><div class="bar"><i id="water-fill" class="water"></i></div><b id="water-val">100</b></div>
-      <div class="stat s-energy" data-i18n-title="energy"><i class="ico"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></i><div class="bar"><i id="energy-fill" class="energy"></i></div><b id="energy-val">100</b></div>
-      <div class="stat s-temp" data-i18n-title="temp"><i class="ico"><svg viewBox="0 0 24 24"><path d="M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0z"/></svg></i><div class="bar"><i id="temp-fill" class="temp"></i></div><b id="temp-val">36.6</b></div>
+      <div class="stat s-health" data-i18n-title="health">
+        <i class="ico"><svg viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg></i>
+        <div class="bar"><i id="health-fill" class="health"></i></div>
+        <b id="health-val">100</b>
+      </div>
+
+      <div class="stat s-food" data-i18n-title="food">
+        <i class="ico"><svg viewBox="0 0 24 24"><path d="M7 3v8M4 3v5a3 3 0 0 0 6 0V3M7 11v10M17 21V3c-2.5 1.5-3.5 4-3.5 7v4H17"/></svg></i>
+        <div class="bar"><i id="food-fill" class="food"></i></div>
+        <b id="food-val">100</b>
+      </div>
+
+      <div class="stat s-water" data-i18n-title="water">
+        <i class="ico"><svg viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg></i>
+        <div class="bar"><i id="water-fill" class="water"></i></div>
+        <b id="water-val">100</b>
+      </div>
+
+      <div class="stat s-energy" data-i18n-title="energy">
+        <i class="ico"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></i>
+        <div class="bar"><i id="energy-fill" class="energy"></i></div>
+        <b id="energy-val">100</b>
+      </div>
+
+      <div class="stat s-temp" data-i18n-title="temp">
+        <i class="ico"><svg viewBox="0 0 24 24"><path d="M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0z"/></svg></i>
+        <div class="bar"><i id="temp-fill" class="temp"></i></div>
+        <b id="temp-val">36.6</b>
+      </div>
     </section>
+
     <div class="top-actions">
       <button data-modal="quest-modal" data-i18n-aria="quests">📜</button>
       <button id="players-button" data-modal="players-modal" data-i18n-aria="players">👥</button>
-      <button data-modal="map-modal" data-i18n-aria="map"><svg viewBox="0 0 24 24"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg></button>
-      <button data-modal="inventory-modal" data-i18n-aria="inventory"><svg viewBox="0 0 24 24"><path d="M5 10a7 7 0 0 1 14 0v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M9 21v-6h6v6M9 5V4a3 3 0 0 1 6 0v1"/></svg></button>
-      <button data-modal="craft-modal" data-i18n-aria="craft"><svg viewBox="0 0 24 24"><path d="M15 4l5 5-3 3-5-5z"/><path d="M12.5 9.5 4 18l2 2 8.5-8.5"/></svg></button>
-      <button id="pause-button" data-i18n-aria="pause"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+      <button data-modal="map-modal" data-i18n-aria="map">
+        <svg viewBox="0 0 24 24"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg>
+      </button>
+      <button data-modal="inventory-modal" data-i18n-aria="inventory">
+        <svg viewBox="0 0 24 24"><path d="M5 10a7 7 0 0 1 14 0v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M9 21v-6h6v6M9 5V4a3 3 0 0 1 6 0v1"/></svg>
+      </button>
+      <button data-modal="craft-modal" data-i18n-aria="craft">
+        <svg viewBox="0 0 24 24"><path d="M15 4l5 5-3 3-5-5z"/><path d="M12.5 9.5 4 18l2 2 8.5-8.5"/></svg>
+      </button>
+      <button id="pause-button" data-i18n-aria="pause">
+        <svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>
+      </button>
     </div>
+
     <div id="hint" data-i18n="hint_start"></div>
-    <div id="quest-line"></div><div id="net-badge" class="hidden"></div><div id="weather-badge"></div><div id="sleep-veil"></div>
+    <div id="quest-line"></div>
+    <div id="net-badge" class="hidden"></div>
+    <div id="weather-badge"></div>
+    <div id="sleep-veil"></div>
     <div id="fps" class="hidden">60</div>
+
     <div id="joystick-zone">
       <div id="joystick-base"><div id="joystick-stick"></div></div>
     </div>
+
     <div id="camera-zone"></div>
     <div id="popups"></div>
+
     <div class="action-buttons">
       <button id="use-button"><span id="use-ico">✋</span><span data-i18n="use"></span></button>
       <button id="sleep-button"><span>💤</span><span data-i18n="sleep"></span></button>
-      <button id="run-button"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span data-i18n="run"></span></button>
-      <button id="jump-button"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg><span data-i18n="jump"></span></button>
-      <button id="collect-button" class="primary"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 20h14"/></svg><span data-i18n="collect"></span></button>
+      <button id="run-button">
+        <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+        <span data-i18n="run"></span>
+      </button>
+      <button id="jump-button">
+        <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        <span data-i18n="jump"></span>
+      </button>
+      <button id="collect-button" class="primary">
+        <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 20h14"/></svg>
+        <span data-i18n="collect"></span>
+      </button>
     </div>
   </div>
 
-  <!-- Ana menü: arkada canlı 3D ada sahnesi görünür -->
+  <!-- ANA MENÜ -->
   <div id="main-menu" class="screen">
     <div class="menu-shade"></div>
+
     <header class="menu-logo">
       <svg class="logo-mark" viewBox="0 0 64 40" aria-hidden="true">
-        <defs><linearGradient id="sunG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3b8"/><stop offset="1" stop-color="#f08a3c"/></linearGradient></defs>
+        <defs>
+          <linearGradient id="sunG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#fff3b8"/>
+            <stop offset="1" stop-color="#f08a3c"/>
+          </linearGradient>
+        </defs>
         <circle cx="30" cy="22" r="12.5" fill="url(#sunG)"/>
         <path d="M2 29q7-5 14 0t14 0 14 0 14 0M8 35q6-4 12 0t12 0 12 0 12 0" fill="none" stroke="#fff7e0" stroke-width="1.8" stroke-linecap="round" opacity=".85"/>
         <path d="M46 30C48 22 46 15 50 6" fill="none" stroke="#1d130c" stroke-width="2.2" stroke-linecap="round"/>
         <path d="M50 6q-8-3-14 2M50 6q-4-6-12-5M50 6q4-6 12-3M50 6q8 0 11 6" fill="none" stroke="#1d130c" stroke-width="1.8" stroke-linecap="round"/>
       </svg>
-      <h1><span class="l1">WILD ISLAND</span><span class="l2">SURVIVAL</span></h1>
+
+      <h1>
+        <span class="l1">WILD ISLAND</span>
+        <span class="l2">SURVIVAL</span>
+      </h1>
       <p class="tagline" data-i18n="tagline"></p>
     </header>
+
     <nav class="menu-panel">
-      <button id="new-game" class="mbtn primary"><svg viewBox="0 0 24 24"><path d="M7 4.5l12 7.5-12 7.5z"/></svg><span data-i18n="new_game"></span></button>
-      <button id="continue-game" class="mbtn"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg><span data-i18n="continue"></span></button>
-      <button id="online-button" class="mbtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg><span data-i18n="online_mp"></span></button>
-      <button id="settings-button" class="mbtn sub"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.2"/><path d="M12 2v2.6M12 19.4V22M2 12h2.6M19.4 12H22M4.9 4.9l1.9 1.9M17.2 17.2l1.9 1.9M19.1 4.9l-1.9 1.9M6.8 17.2l-1.9 1.9"/></svg><span data-i18n="settings"></span></button>
-      <button id="language-button" class="mbtn sub"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg><span data-i18n="language"></span><em id="lang-badge">TR</em></button>
-      <button id="about-button" class="mbtn sub"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg><span data-i18n="about"></span></button>
-      <button id="quit-button" class="mbtn sub danger"><svg viewBox="0 0 24 24"><path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0"/></svg><span data-i18n="quit"></span></button>
+      <button id="new-game" class="mbtn primary">
+        <svg viewBox="0 0 24 24"><path d="M7 4.5l12 7.5-12 7.5z"/></svg>
+        <span data-i18n="new_game"></span>
+      </button>
+
+      <button id="continue-game" class="mbtn">
+        <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        <span data-i18n="continue"></span>
+      </button>
+
+      <button id="online-button" class="mbtn">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>
+        <span data-i18n="online_mp"></span>
+      </button>
+
+      <button id="settings-button" class="mbtn sub">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.2"/><path d="M12 2v2.6M12 19.4V22M2 12h2.6M19.4 12H22M4.9 4.9l1.9 1.9M17.2 17.2l1.9 1.9M19.1 4.9l-1.9 1.9M6.8 17.2l-1.9-1.9"/></svg>
+        <span data-i18n="settings"></span>
+      </button>
+
+      <button id="language-button" class="mbtn sub">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>
+        <span data-i18n="language"></span>
+        <em id="lang-badge">TR</em>
+      </button>
+
+      <button id="about-button" class="mbtn sub">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>
+        <span data-i18n="about"></span>
+      </button>
+
+      <button id="quit-button" class="mbtn sub danger">
+        <svg viewBox="0 0 24 24"><path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>
+        <span data-i18n="quit"></span>
+      </button>
     </nav>
+
     <div class="menu-version">v2.0</div>
   </div>
 
-  <!-- Modallar -->
+  <!-- MODALLAR -->
   <div id="inventory-modal" class="modal hidden">
-    <div class="modal-card"><header><h3 data-i18n="inventory_title"></h3><button class="close" data-i18n-aria="close">✕</button></header><div id="inventory-list" class="item-grid"></div></div>
+    <div class="modal-card">
+      <header><h3 data-i18n="inventory_title"></h3><button class="close" data-i18n-aria="close">✕</button></header>
+      <div id="inventory-list" class="item-grid"></div>
+    </div>
   </div>
+
   <div id="craft-modal" class="modal hidden">
-    <div class="modal-card"><header><h3 data-i18n="craft_title"></h3><button class="close" data-i18n-aria="close">✕</button></header><div class="tabs"><button id="tab-items" class="on" data-i18n="tab_items"></button><button id="tab-build" data-i18n="tab_build"></button></div><div id="craft-list" class="recipe-list"></div></div>
+    <div class="modal-card">
+      <header><h3 data-i18n="craft_title"></h3><button class="close" data-i18n-aria="close">✕</button></header>
+      <div class="tabs">
+        <button id="tab-items" class="on" data-i18n="tab_items"></button>
+        <button id="tab-build" data-i18n="tab_build"></button>
+      </div>
+      <div id="craft-list" class="recipe-list"></div>
+    </div>
   </div>
+
   <div id="map-modal" class="modal hidden">
-    <div class="modal-card"><header><h3 data-i18n="map_title"></h3><button class="close" data-i18n-aria="close">✕</button></header><canvas id="map-canvas" width="520" height="520"></canvas><div class="map-info"><span data-i18n="explored"></span> <b id="explored"></b></div></div>
+    <div class="modal-card">
+      <header><h3 data-i18n="map_title"></h3><button class="close" data-i18n-aria="close">✕</button></header>
+      <canvas id="map-canvas" width="520" height="520"></canvas>
+      <div class="map-info"><span data-i18n="explored"></span> <b id="explored"></b></div>
+    </div>
   </div>
+
   <div id="settings-modal" class="modal hidden">
-    <div class="modal-card"><header><h3 data-i18n="settings_title"></h3><button class="close" data-i18n-aria="close">✕</button></header>
-      <label><span data-i18n="quality"></span> <select id="quality"><option value="low" data-i18n="q_low"></option><option value="medium" data-i18n="q_medium" selected></option><option value="high" data-i18n="q_high"></option></select></label>
-      <label><span data-i18n="sensitivity"></span> <input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1"></label>
+    <div class="modal-card">
+      <header><h3 data-i18n="settings_title"></h3><button class="close" data-i18n-aria="close">✕</button></header>
+      <label><span data-i18n="quality"></span>
+        <select id="quality">
+          <option value="low" data-i18n="q_low"></option>
+          <option value="medium" data-i18n="q_medium" selected></option>
+          <option value="high" data-i18n="q_high"></option>
+        </select>
+      </label>
+      <label><span data-i18n="sensitivity"></span>
+        <input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1">
+      </label>
       <label class="check"><input id="show-fps" type="checkbox"> <span data-i18n="show_fps"></span></label>
       <label class="check"><input id="sound-on" type="checkbox" checked> <span data-i18n="sound"></span></label>
       <button id="save-settings" class="wide primary" data-i18n="save_settings"></button>
     </div>
   </div>
+
   <div id="language-modal" class="modal hidden">
-    <div class="modal-card narrow"><header><h3 data-i18n="language_title"></h3><button class="close" data-i18n-aria="close">✕</button></header>
+    <div class="modal-card narrow">
+      <header><h3 data-i18n="language_title"></h3><button class="close" data-i18n-aria="close">✕</button></header>
       <div id="language-list" class="lang-list"></div>
     </div>
   </div>
+
   <div id="quit-modal" class="modal hidden">
-    <div class="modal-card narrow"><header><h3 data-i18n="quit_title"></h3></header>
+    <div class="modal-card narrow">
+      <header><h3 data-i18n="quit_title"></h3></header>
       <p class="quit-text" data-i18n="quit_text"></p>
-      <div class="btn-row"><button id="quit-cancel" class="wide" data-i18n="cancel"></button><button id="quit-confirm" class="wide primary danger-fill" data-i18n="yes_quit"></button></div>
+      <div class="btn-row">
+        <button id="quit-cancel" class="wide" data-i18n="cancel"></button>
+        <button id="quit-confirm" class="wide primary danger-fill" data-i18n="yes_quit"></button>
+      </div>
     </div>
-  </div>
-  <div id="pause-modal" class="modal hidden">
-    <div class="modal-card narrow"><header><h3 data-i18n="pause_title"></h3><button class="close" data-i18n-aria="close">✕</button></header><button id="resume-button" class="wide primary" data-i18n="resume"></button><button id="save-button" class="wide" data-i18n="save"></button><button id="menu-button" class="wide" data-i18n="main_menu"></button></div>
   </div>
 
-  <div id="quest-modal" class="modal hidden"><div class="modal-card"><header><h3 data-i18n="quests"></h3><button class="close">✕</button></header><div id="quest-list" class="quest-list"></div></div></div>
-  <div id="players-modal" class="modal hidden"><div class="modal-card narrow"><header><h3 data-i18n="players"></h3><button class="close">✕</button></header><div id="players-list" class="plist"></div></div></div>
-  <div id="chest-modal" class="modal hidden"><div class="modal-card"><header><h3 data-i18n="item_Chest"></h3><button class="close">✕</button></header><div class="chest-cols"><div><b data-i18n="bag"></b><div id="chest-inv" class="item-grid"></div></div><div><b data-i18n="chest_store"></b><div id="chest-store" class="item-grid"></div></div></div></div></div>
-  <div id="about-modal" class="modal hidden"><div class="modal-card"><header><h3 data-i18n="about"></h3><button class="close">✕</button></header><p class="about-text" data-i18n="about_text"></p></div></div>
-  <div id="win-modal" class="modal hidden"><div class="modal-card narrow"><header><h3 data-i18n="win_title"></h3></header><p class="quit-text" data-i18n="win_text"></p><button id="win-menu" class="wide primary" data-i18n="main_menu"></button></div></div>
-  <div id="dead-modal" class="modal hidden"><div class="modal-card narrow"><header><h3 data-i18n="dead_title"></h3></header><p class="quit-text" data-i18n="dead_text"></p><button id="respawn-button" class="wide primary" data-i18n="respawn"></button></div></div>
-  <div id="online-modal" class="modal hidden"><div class="modal-card">
-    <header><h3 data-i18n="online_mp"></h3><button class="close">✕</button></header>
-    <div id="online-connect">
-      <label class="fld"><span data-i18n="srv_url"></span><input id="srv-url" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="wss://sunucu-adresi.example.com"></label>
-      <label class="fld"><span data-i18n="nick"></span><input id="nick" type="text" maxlength="16" autocomplete="off"></label>
-      <div class="btn-grid"><button id="ol-create" class="primary" data-i18n="ol_create"></button><button id="ol-quick" data-i18n="ol_quick"></button><button id="ol-friends" data-i18n="ol_friends"></button></div>
-      <label class="fld"><span data-i18n="ol_join"></span><span class="row"><input id="room-code" type="text" maxlength="9" placeholder="WILD-7284" autocomplete="off" autocapitalize="characters"><button id="ol-join" class="primary" data-i18n="ol_join_btn"></button></span></label>
-      <p id="ol-msg" class="ol-msg"></p>
+  <div id="pause-modal" class="modal hidden">
+    <div class="modal-card narrow">
+      <header><h3 data-i18n="pause_title"></h3><button class="close" data-i18n-aria="close">✕</button></header>
+      <button id="resume-button" class="wide primary" data-i18n="resume"></button>
+      <button id="save-button" class="wide" data-i18n="save"></button>
+      <button id="menu-button" class="wide" data-i18n="main_menu"></button>
     </div>
-    <div id="online-lobby" class="hidden">
-      <div class="code-row"><span data-i18n="room_code"></span><b id="lobby-code">WILD-0000</b><button id="copy-code" data-i18n="copy"></button><button id="share-code" data-i18n="share"></button></div>
-      <div id="lobby-list" class="plist"></div>
-      <p id="lobby-note" class="ol-msg"></p>
-      <div class="btn-row"><button id="lobby-leave" class="wide" data-i18n="leave"></button><button id="lobby-start" class="wide primary" data-i18n="start_game"></button></div>
+  </div>
+
+  <div id="quest-modal" class="modal hidden">
+    <div class="modal-card">
+      <header><h3 data-i18n="quests"></h3><button class="close">✕</button></header>
+      <div id="quest-list" class="quest-list"></div>
     </div>
-  </div></div>
+  </div>
+
+  <div id="players-modal" class="modal hidden">
+    <div class="modal-card narrow">
+      <header><h3 data-i18n="players"></h3><button class="close">✕</button></header>
+      <div id="players-list" class="plist"></div>
+    </div>
+  </div>
+
+  <div id="chest-modal" class="modal hidden">
+    <div class="modal-card">
+      <header><h3 data-i18n="item_Chest"></h3><button class="close">✕</button></header>
+      <div class="chest-cols">
+        <div><b data-i18n="bag"></b><div id="chest-inv" class="item-grid"></div></div>
+        <div><b data-i18n="chest_store"></b><div id="chest-store" class="item-grid"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="about-modal" class="modal hidden">
+    <div class="modal-card">
+      <header><h3 data-i18n="about"></h3><button class="close">✕</button></header>
+      <p class="about-text" data-i18n="about_text"></p>
+    </div>
+  </div>
+
+  <div id="win-modal" class="modal hidden">
+    <div class="modal-card narrow">
+      <header><h3 data-i18n="win_title"></h3></header>
+      <p class="quit-text" data-i18n="win_text"></p>
+      <button id="win-menu" class="wide primary" data-i18n="main_menu"></button>
+    </div>
+  </div>
+
+  <div id="dead-modal" class="modal hidden">
+    <div class="modal-card narrow">
+      <header><h3 data-i18n="dead_title"></h3></header>
+      <p class="quit-text" data-i18n="dead_text"></p>
+      <button id="respawn-button" class="wide primary" data-i18n="respawn"></button>
+    </div>
+  </div>
+
+  <!-- ONLINE -->
+  <div id="online-modal" class="modal hidden">
+    <div class="modal-card">
+      <header><h3 data-i18n="online_mp"></h3><button class="close">✕</button></header>
+
+      <div id="online-connect">
+        <label class="fld">
+          <span data-i18n="srv_url"></span>
+          <input id="srv-url" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="wss://sunucu-adresi.example.com">
+        </label>
+
+        <label class="fld">
+          <span data-i18n="nick"></span>
+          <input id="nick" type="text" maxlength="16" autocomplete="off">
+        </label>
+
+        <div class="btn-grid">
+          <button id="ol-create" class="primary" data-i18n="ol_create"></button>
+          <button id="ol-quick" data-i18n="ol_quick"></button>
+          <button id="ol-friends" data-i18n="ol_friends"></button>
+        </div>
+
+        <label class="fld">
+          <span data-i18n="ol_join"></span>
+          <span class="row">
+            <input id="room-code" type="text" maxlength="9" placeholder="WILD-7284" autocomplete="off" autocapitalize="characters">
+            <button id="ol-join" class="primary" data-i18n="ol_join_btn"></button>
+          </span>
+        </label>
+
+        <p id="ol-msg" class="ol-msg"></p>
+      </div>
+
+      <div id="online-lobby" class="hidden">
+        <div class="code-row">
+          <span data-i18n="room_code"></span>
+          <b id="lobby-code">WILD-0000</b>
+          <button id="copy-code" data-i18n="copy"></button>
+          <button id="share-code" data-i18n="share"></button>
+        </div>
+        <div id="lobby-list" class="plist"></div>
+        <p id="lobby-note" class="ol-msg"></p>
+        <div class="btn-row">
+          <button id="lobby-leave" class="wide" data-i18n="leave"></button>
+          <button id="lobby-start" class="wide primary" data-i18n="start_game"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" aria-live="polite"></div>
   <div id="net-banner" class="hidden"></div>
 
-  <div id="rotate-overlay"><div class="rot-icon"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/></svg></div><b data-i18n="rotate_title"></b><small data-i18n="rotate_text"></small></div>
-  <div id="fade"></div>
-  <div id="loading-screen"><div class="brand">WILD ISLAND</div><div class="sub">SURVIVAL</div><div class="loader"></div><small data-i18n="loading"></small></div>
+  <div id="rotate-overlay">
+    <div class="rot-icon"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/></svg></div>
+    <b data-i18n="rotate_title"></b>
+    <small data-i18n="rotate_text"></small>
+  </div>
 
-  <script>window.__boot={t:Date.now()};</script>
+  <div id="fade"></div>
+
+  <div id="loading-screen">
+    <div class="brand">WILD ISLAND</div>
+    <div class="sub">SURVIVAL</div>
+    <div class="loader"></div>
+    <small data-i18n="loading"></small>
+  </div>
+
+  <!-- JAVASCRIPT FAYLLARI: SIRA VACİBDİR -->
   <script src="js/config.js"></script>
   <script src="shared/rules.js"></script>
   <script src="js/three.min.js"></script>
@@ -150,4 +384,4 @@
   <script src="js/game.js"></script>
   <script src="js/boot-guard.js"></script>
 </body>
-</html>
+          </html>
